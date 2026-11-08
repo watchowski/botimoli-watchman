@@ -1,0 +1,61 @@
+# A watchman outside the building: a dead bot can't say it is dead.
+# Lives in the public repo watchowski/botimoli-watchman as .github/workflows/watchman.yml, where
+# GitHub's minutes are free. This is the reviewed source; update that copy by hand after a change.
+# It needs no keys: an issue naming the owner reaches them by GitHub's own email.
+name: Watchman
+
+on:
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: Run the monthly drill now
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: watchman
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      URL: https://botimoli-agent.vercel.app/api/health-trial-nothing-here
+      OWNER: watchowski
+      DRILL: ${{ github.event.schedule == '23 9 1 * *' || inputs.drill == true }}
+    steps:
+      - name: Ask Botimoli, and open or close the issue
+        if: env.DRILL != 'true'
+        run: |
+          title="Botimoli is not answering"
+          alive=""
+          for try in 1 2 3; do
+            if answer=$(curl -fsS --max-time 20 "$URL" 2>&1); then alive=yes; break; fi
+            sleep 30
+          done
+          echo "$answer"
+          open=$(gh api "repos/$GITHUB_REPOSITORY/issues?state=open&per_page=100" --jq ".[] | select(.title == \"$title\") | .number" | head -1)
+          if [ -n "$alive" ] && [ -n "$open" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/$open/comments" -f body="It answers again: $answer" > /dev/null
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$open" -f state=closed > /dev/null
+          elif [ -z "$alive" ] && [ -z "$open" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues" -f title="$title" \
+              -f body="@$OWNER Botimoli didn't answer three times in a row. Messages in Slack may be going unanswered. Its last words: $answer. This issue closes itself when it answers again." > /dev/null
+          fi
+
+      # Proves the alarm's path still reaches the owner, and is the repo activity that stops
+      # GitHub switching this schedule off after 60 quiet days.
+      - name: Monthly drill
+        if: env.DRILL == 'true'
+        run: |
+          number=$(gh api "repos/$GITHUB_REPOSITORY/issues" -f title="Drill: the watchman's alarm works" \
+            -f body="@$OWNER This is the monthly test of the alarm. Nothing is wrong, and there is nothing to do." --jq .number)
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$number" -f state=closed > /dev/null
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/last-drill.txt" --jq .sha 2>/dev/null || true)
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/last-drill.txt" \
+            -f message="Monthly drill" -f content="$(date -u +%FT%TZ | base64)" ${sha:+-f sha="$sha"} > /dev/null
