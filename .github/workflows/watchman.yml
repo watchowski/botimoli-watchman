@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
-      URL: https://botimoli-agent.vercel.app/api/health-trial-nothing-here
+      URL: https://api.github.com/zen
       OWNER: watchowski
       DRILL: ${{ github.event.schedule == '23 9 1 * *' || inputs.drill == true }}
     steps:
