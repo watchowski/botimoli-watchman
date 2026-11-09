@@ -5,6 +5,9 @@
 name: Watchman
 
 on:
+  schedule:
+    - cron: "7,37 * * * *"
+    - cron: "23 9 1 * *"
   workflow_dispatch:
     inputs:
       drill:
@@ -25,7 +28,7 @@ jobs:
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
-      URL: https://api.github.com/zen
+      URL: https://botimoli-agent.vercel.app/api/health
       OWNER: watchowski
       DRILL: ${{ github.event.schedule == '23 9 1 * *' || inputs.drill == true }}
     steps:
@@ -56,6 +59,6 @@ jobs:
           number=$(gh api "repos/$GITHUB_REPOSITORY/issues" -f title="Drill: the watchman's alarm works" \
             -f body="@$OWNER This is the monthly test of the alarm. Nothing is wrong, and there is nothing to do." --jq .number)
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/$number" -f state=closed > /dev/null
-          sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/last-drill.txt" --jq .sha 2>/dev/null || true)
+          sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/last-drill.txt" --jq .sha 2>/dev/null) || sha=""
           gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/last-drill.txt" \
             -f message="Monthly drill" -f content="$(date -u +%FT%TZ | base64)" ${sha:+-f sha="$sha"} > /dev/null
